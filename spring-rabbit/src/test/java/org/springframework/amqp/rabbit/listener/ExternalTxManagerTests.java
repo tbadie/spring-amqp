@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2019 the original author or authors.
+ * Copyright 2002-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -37,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.rabbitmq.client.AMQP;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
@@ -46,11 +48,13 @@ import org.springframework.amqp.ImmediateAcknowledgeAmqpException;
 import org.springframework.amqp.core.MessageListener;
 import org.springframework.amqp.rabbit.connection.AbstractConnectionFactory;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactoryUtils;
 import org.springframework.amqp.rabbit.connection.SingleConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
 import org.springframework.amqp.rabbit.transaction.RabbitTransactionManager;
 import org.springframework.beans.DirectFieldAccessor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.interceptor.DefaultTransactionAttribute;
@@ -69,6 +73,7 @@ import com.rabbitmq.client.Envelope;
 
 /**
  * @author Gary Russell
+ * @author Thomas Badie
  * @since 1.1.2
  *
  */
@@ -758,7 +763,7 @@ public abstract class ExternalTxManagerTests {
 		container.stop();
 	}
 
-	private Answer<Channel> ensureOneChannelAnswer(final Channel onlyChannel,
+	protected Answer<Channel> ensureOneChannelAnswer(final Channel onlyChannel,
 			final AtomicReference<Exception> tooManyChannels) {
 		final AtomicBoolean done = new AtomicBoolean();
 		return invocation -> {
@@ -776,7 +781,7 @@ public abstract class ExternalTxManagerTests {
 	protected abstract AbstractMessageListenerContainer createContainer(AbstractConnectionFactory connectionFactory);
 
 	@SuppressWarnings("serial")
-	private static class DummyTxManager extends AbstractPlatformTransactionManager {
+	protected static class DummyTxManager extends AbstractPlatformTransactionManager {
 
 		private volatile boolean committed;
 
@@ -803,6 +808,30 @@ public abstract class ExternalTxManagerTests {
 		protected void doRollback(DefaultTransactionStatus status) throws TransactionException {
 			this.rolledBack = true;
 			this.latch.countDown();
+		}
+
+		public boolean isCommitted() {
+			return committed;
+		}
+
+		public void setCommitted(boolean committed) {
+			this.committed = committed;
+		}
+
+		public boolean isRolledBack() {
+			return rolledBack;
+		}
+
+		public void setRolledBack(boolean rolledBack) {
+			this.rolledBack = rolledBack;
+		}
+
+		public CountDownLatch getLatch() {
+			return latch;
+		}
+
+		public void setLatch(CountDownLatch latch) {
+			this.latch = latch;
 		}
 	}
 
